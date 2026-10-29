@@ -79,6 +79,17 @@
 #define CTL_TYPE_NODE_DISCOVER_REQ      0x80
 #define CTL_TYPE_NODE_DISCOVER_RESP     0x90
 
+// Serial UART output
+#ifdef MESH_SERIAL_MESSAGE_LOG
+  #ifndef MESH_SERIAL_LOG_TX_PIN
+    #error "Define MESH_LOG_TX_PIN"
+  #endif
+
+  #ifndef MESH_SERIAL_LOG_BAUD
+    #define MESH_SERIAL_LOG_BAUD 115200
+  #endif
+#endif
+
 struct AdvertPath {
   uint8_t pubkey_prefix[7];
   uint8_t path_len;
@@ -238,6 +249,7 @@ private:
   // helpers, short-cuts
   void saveChannels() { _store->saveChannels(this); }
   void saveContacts();
+  void printAsciiText(HardwareSerial *serial, const char *text);
 
   DataStore* _store;
   NodePrefs _prefs;
@@ -288,6 +300,9 @@ private:
 
   #define ADVERT_PATH_TABLE_SIZE   16
   AdvertPath advert_paths[ADVERT_PATH_TABLE_SIZE]; // circular table
+
+  HardwareSerial logUart{2};  // UART2
+  HardwareSerial *log_serial = nullptr;
 };
 
 extern MyMesh the_mesh;

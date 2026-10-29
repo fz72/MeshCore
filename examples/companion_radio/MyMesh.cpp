@@ -528,6 +528,16 @@ void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t 
                            const char *text) {
   markConnectionActive(from); // in case this is from a server, and we have a connection
   queueMessage(from, TXT_TYPE_PLAIN, pkt, sender_timestamp, NULL, 0, text);
+  
+  if (log_serial != nullptr) {
+    for (int n = 0; n < 6; n++) {
+      if (from.id.pub_key[n] < 0x10) log_serial->print('0');
+      log_serial->print(from.id.pub_key[n], HEX);
+    }
+    log_serial->print(": ");
+    printAsciiText(log_serial, text);
+    log_serial->println();
+  }
 }
 
 void MyMesh::onCommandDataRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t sender_timestamp, const char *text) {
@@ -549,10 +559,20 @@ void MyMesh::onCLICommandRecv(const ContactInfo &from, mesh::Packet *pkt, uint32
 
 void MyMesh::onSignedMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t sender_timestamp,
                                  const uint8_t *sender_prefix, const char *text) {
-  markConnectionActive(from);
+                                  markConnectionActive(from);
   // from.sync_since change needs to be persisted
   dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
   queueMessage(from, TXT_TYPE_SIGNED_PLAIN, pkt, sender_timestamp, sender_prefix, 4, text);
+
+  if (log_serial != nullptr) {
+    for (int n = 0; n < 6; n++) {
+      if (from.id.pub_key[n] < 0x10) log_serial->print('0');
+      log_serial->print(from.id.pub_key[n], HEX);
+    }
+    log_serial->print(": ");
+    printAsciiText(log_serial, text);
+    log_serial->println();
+  }
 }
 
 void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packet *pkt, uint32_t timestamp,
@@ -595,6 +615,22 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
     }
     _listener->onChannelMessageRecv(pkt, channel_details, text);
     _listener->onQueueSizeChanged(offline_queue_len);
+  }
+
+  if (log_serial != nullptr) {
+    ChannelDetails details;
+    const bool have_channel = getChannel(channel_idx, details);
+
+    log_serial->print('[');
+    if (have_channel) {
+      printAsciiText(log_serial, details.name);
+    } else {
+      log_serial->print(channel_idx);
+    }
+    log_serial->print("] ");
+
+    printAsciiText(log_serial, text);
+    log_serial->println();
   }
 }
 
@@ -974,6 +1010,17 @@ void MyMesh::begin() {
     temp.getAutoKeyFor(0, "#" DEFAULT_FLOOD_SCOPE_NAME, key);
     memcpy(_prefs.default_scope_key, key.key, sizeof(key.key));
   }
+#endif
+
+#ifdef MESH_SERIAL_MESSAGE_LOG
+  // Initialize UART serial output
+  logUart.begin(
+    MESH_SERIAL_LOG_BAUD,
+    SERIAL_8N1,
+    -1,
+    MESH_SERIAL_LOG_TX_PIN
+  );
+  log_serial = &logUart;
 #endif
 
   // load persisted prefs
@@ -2556,4 +2603,33 @@ bool MyMesh::advert() {
 // To check if there is pending work
 bool MyMesh::hasPendingWork() const {
   return _mgr->getOutboundTotal() > 0 || dirty_contacts_expiry != 0;
+}
+
+void MyMesh::printAsciiText(HardwareSerial *serial, const char *text) {
+  if (serial == nullptr || text == nullptr) return;
+
+  const uint8_t *p = reinterpret_cast<const uint8_t *>(text);
+
+  while (*p != '\0') {
+    // Deutsche Umlaute und ß in UTF-8
+    if (p[0] == 0xC3 && p[1] != '\0') {
+      switch (p[1]) {
+        case 0x84: serial->print("Ae"); p += 2; continue; // Ä
+        case 0x96: serial->print("Oe"); p += 2; continue; // Ö
+        case 0x9C: serial->print("Ue"); p += 2; continue; // Ü
+        case 0xA4: serial->print("ae"); p += 2; continue; // ä
+        case 0xB6: serial->print("oe"); p += 2; continue; // ö
+        case 0xBC: serial->print("ue"); p += 2; continue; // ü
+        case 0x9F: serial->print("ss"); p += 2; continue; // ß
+      }
+    }
+
+    // ASCII unverändert senden; andere UTF-8-Bytes durch ? ersetzen
+    if (*p < 0x80) {
+      serial->write(*p++);
+    } else {
+      serial->write('?');
+      p++;
+    }
+  }
 }
