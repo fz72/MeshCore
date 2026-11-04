@@ -535,7 +535,7 @@ void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t 
       log_serial->print(from.id.pub_key[n], HEX);
     }
     log_serial->print(": ");
-    printAsciiText(log_serial, text);
+    log_serial->print(text);
     log_serial->println();
   }
 }
@@ -570,7 +570,7 @@ void MyMesh::onSignedMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uin
       log_serial->print(from.id.pub_key[n], HEX);
     }
     log_serial->print(": ");
-    printAsciiText(log_serial, text);
+    log_serial->print(text);
     log_serial->println();
   }
 }
@@ -623,13 +623,13 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
 
     log_serial->print('[');
     if (have_channel) {
-      printAsciiText(log_serial, details.name);
+      log_serial->print(details.name);
     } else {
       log_serial->print(channel_idx);
     }
     log_serial->print("] ");
 
-    printAsciiText(log_serial, text);
+    log_serial->print(text);
     log_serial->println();
   }
 }
@@ -962,6 +962,7 @@ MyMesh::MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMe
   _prefs.gps_enabled = 0;       // GPS disabled by default
   _prefs.gps_interval = 0;      // No automatic GPS updates by default
   _prefs.radio_fem_rxgain = 1;
+  _prefs.advert_interval = 60;        // default to 2 minutes for NEW installs
 #ifdef RADIO_FEM_TXGAIN
   _prefs.radio_fem_txgain = RADIO_FEM_TXGAIN;   // board-specific default for PA
 #else
@@ -1042,6 +1043,8 @@ void MyMesh::begin() {
   _prefs.gps_interval = constrain(_prefs.gps_interval, 0, 86400);  // Max 24 hours
 
   _active_ble_pin = _prefs.ble_pin;
+
+  updateAdvertTimer();
 
   resetContacts();
   _store->loadContacts(this);
@@ -2583,6 +2586,19 @@ void MyMesh::loop() {
     saveContacts();
     dirty_contacts_expiry = 0;
   }
+
+  if (next_local_advert && millisHasNowPassed(next_local_advert)) {
+    advert();
+    updateAdvertTimer(); // schedule next local advert
+  }
+}
+
+void MyMesh::updateAdvertTimer() {
+  if (_prefs.advert_interval > 0) { // schedule local advert timer
+    next_local_advert = futureMillis(((uint32_t)_prefs.advert_interval) * 2 * 60 * 1000);
+  } else {
+    next_local_advert = 0; // stop the timer
+  }
 }
 
 bool MyMesh::advert() {
@@ -2603,33 +2619,4 @@ bool MyMesh::advert() {
 // To check if there is pending work
 bool MyMesh::hasPendingWork() const {
   return _mgr->getOutboundTotal() > 0 || dirty_contacts_expiry != 0;
-}
-
-void MyMesh::printAsciiText(HardwareSerial *serial, const char *text) {
-  if (serial == nullptr || text == nullptr) return;
-
-  const uint8_t *p = reinterpret_cast<const uint8_t *>(text);
-
-  while (*p != '\0') {
-    // Deutsche Umlaute und ß in UTF-8
-    if (p[0] == 0xC3 && p[1] != '\0') {
-      switch (p[1]) {
-        case 0x84: serial->print("Ae"); p += 2; continue; // Ä
-        case 0x96: serial->print("Oe"); p += 2; continue; // Ö
-        case 0x9C: serial->print("Ue"); p += 2; continue; // Ü
-        case 0xA4: serial->print("ae"); p += 2; continue; // ä
-        case 0xB6: serial->print("oe"); p += 2; continue; // ö
-        case 0xBC: serial->print("ue"); p += 2; continue; // ü
-        case 0x9F: serial->print("ss"); p += 2; continue; // ß
-      }
-    }
-
-    // ASCII unverändert senden; andere UTF-8-Bytes durch ? ersetzen
-    if (*p < 0x80) {
-      serial->write(*p++);
-    } else {
-      serial->write('?');
-      p++;
-    }
-  }
 }

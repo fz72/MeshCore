@@ -48,6 +48,7 @@ public:
   char default_scope_name[31];
   uint8_t default_scope_key[16];
   float tz_offset = 0;
+  uint8_t advert_interval = 2;       // minutes / 2 : 1440m = 1 day
 #ifdef ENABLE_WIFI_INTERFACE
   #ifndef WIFI_SSID
     #define WIFI_SSID ""
@@ -241,7 +242,7 @@ private:
 protected:
   void structure() override {
     def("name", node_name, sizeof(node_name));
-    //def("adv_int", advert_interval);
+    def("adv_int", advert_interval);
     //def("f_adv_int", flood_advert_interval);
     def("lat", node_lat);
     def("lon", node_lon);

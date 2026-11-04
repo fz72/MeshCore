@@ -7,11 +7,11 @@
 #define FIRMWARE_VER_CODE 14
 
 #ifndef FIRMWARE_BUILD_DATE
-#define FIRMWARE_BUILD_DATE "15 Oct 2026"
+#define FIRMWARE_BUILD_DATE "04 Nov 2026"
 #endif
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "v1.18.0"
+#define FIRMWARE_VERSION "v1.18.1"
 #endif
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
@@ -133,6 +133,7 @@ public:
   void loop();
   void handleCmdFrame(size_t len);
   bool advert();
+  void updateAdvertTimer();
   void enterCLIRescue();
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
@@ -250,6 +251,8 @@ private:
   void saveChannels() { _store->saveChannels(this); }
   void saveContacts();
   void printAsciiText(HardwareSerial *serial, const char *text);
+
+  unsigned long next_local_advert;
 
   DataStore* _store;
   NodePrefs _prefs;
